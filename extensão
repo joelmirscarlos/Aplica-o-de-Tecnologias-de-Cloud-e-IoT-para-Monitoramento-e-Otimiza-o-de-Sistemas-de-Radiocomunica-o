@@ -1,0 +1,107 @@
+import random
+import time
+import requests
+import json
+
+
+TEMP_THRESHOLD = 80 
+INVERTER_VOLTAGE_THRESHOLD = 200 
+
+
+ZABBIX_API_URL = "https://motorola.zabbix.solutions/api_jsonrpc.php"
+ZABBIX_USER = "usuario"  
+ZABBIX_PASSWORD = "senha"  
+
+auth_token = None
+
+
+def zabbix_authenticate():
+    global auth_token
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "user.login",
+        "params": {
+            "user": ZABBIX_USER,
+            "password": ZABBIX_PASSWORD
+        },
+        "id": 1,
+        "auth": None
+    }
+    
+    try:
+        response = requests.post(ZABBIX_API_URL, json=payload)
+        result = response.json()
+        if "result" in result:
+            auth_token = result['result']
+            print(f"Autenticado com sucesso. Token: {auth_token}")
+        else:
+            print("Falha na autenticação:", result)
+    except Exception as e:
+        print(f"Erro ao autenticar no Zabbix: {e}")
+
+
+def send_data_to_zabbix(sensor_data):
+    if not auth_token:
+        print("Erro: Não autenticado no Zabbix.")
+        return
+    
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "item.create",
+        "params": {
+            "host": "Nome_do_host",  # O host configurado no Zabbix
+            "key_": "sensor_data",
+            "value_type": 3,  # Tipo de dado (3 = numérico)
+            "delay": "10s",
+            "item": sensor_data  # Dado coletado
+        },
+        "auth": auth_token,
+        "id": 1
+    }
+
+    try:
+        response = requests.post(ZABBIX_API_URL, json=payload)
+        result = response.json()
+        if "result" in result:
+            print(f"Dados enviados ao Zabbix: {sensor_data}")
+        else:
+            print(f"Erro ao enviar dados ao Zabbix: {result}")
+    except Exception as e:
+        print(f"Falha na comunicação com o Zabbix: {e}")
+
+
+def collect_sensor_data():
+    data = {
+        'temperature': random.uniform(20, 100),  # Simulando dados de temperatura
+        'inverter_voltage': random.uniform(180, 240),  # Simulando tensão de saída dos inversores
+        'inverter_status': random.choice([True, False]),  # Simulando estado do inversor (on/off)
+    }
+    return data
+
+def check_alert_conditions(sensor_data):
+    if sensor_data['temperature'] > TEMP_THRESHOLD:
+        print(f"ALERTA! Temperatura alta detectada: {sensor_data['temperature']}ºC")
+    if sensor_data['inverter_voltage'] < INVERTER_VOLTAGE_THRESHOLD:
+        print(f"ALERTA! Tensão baixa nos inversores detectada: {sensor_data['inverter_voltage']}V")
+    if not sensor_data['inverter_status']:
+        print(f"ALERTA! Inversor desligado detectado!")
+
+
+def monitor_system():
+    # Autenticar no Zabbix
+    zabbix_authenticate()
+
+    while True:
+   
+        sensor_data = collect_sensor_data()
+        
+        check_alert_conditions(sensor_data)
+        
+        send_data_to_zabbix(sensor_data)
+        
+        time.sleep(10)
+
+if __name__ == "__main__":
+    print("Iniciando monitoramento do sistema de radiocomunicação...")
+    monitor_system()
